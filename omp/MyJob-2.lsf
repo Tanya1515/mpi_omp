@@ -1,0 +1,22 @@
+#BSUB -n 10 -q short
+#BSUB -W 00:15
+#BSUB -o 2mm_par.%J.out
+#BSUB -e 2mm_par.%J.err
+echo 1 thread:
+OMP_NUM_THREADS=1 ./2mm_par
+echo 2 threads:
+OMP_NUM_THREADS=2 ./2mm_par
+echo 4 threads:
+OMP_NUM_THREADS=4 ./2mm_par
+echo 8 threads:
+OMP_NUM_THREADS=8 ./2mm_par
+echo 16 threads:
+OMP_NUM_THREADS=16 ./2mm_par
+echo 32 threads:
+OMP_NUM_THREADS=32 ./2mm_par
+echo 64 threads:
+OMP_NUM_THREADS=64 ./2mm_par
+echo 128 threads:
+OMP_NUM_THREADS=128 ./2mm_par
+echo 160 threads:
+OMP_NUM_THREADS=160 ./2mm_par
