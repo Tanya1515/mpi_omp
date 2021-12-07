@@ -1,6 +1,8 @@
 #include <mpi.h>
 #include <stdio.h>
+#include <stdlib.h>
 #define M 10
+
 
 int main( int argc, char **argv ) {
     int n;
