@@ -1,87 +1,74 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <mpi.h>
 
-#define SIZE 5
+#include "mpi.h"
 
-int main(int argc, char **argv)
-{
+
+int main(int argc, char **argv) {
     MPI_Init(&argc, &argv);
-    int rank, tasks;
-    MPI_Comm comm;
+
+    int wrank, wsize;
+    unsigned L = 8000; 
+    unsigned K = 100; 
+    unsigned Count = L / (2 * K); 
+    double* message = malloc(L * sizeof(double));
+    int paths[2][7] = {{0, 1, 2, 3, 7, 11, 15}, {0, 4, 8, 12, 13, 14, 15}};
     MPI_Status status;
-    int Count;
-    //Функция определения номера процесса
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    // Функция определения числа процессов в области связи
-    MPI_Comm_size(MPI_COMM_WORLD, &tasks);
-
-    int size[2] = {SIZE, SIZE};
-    int periodic[2] = {0};
-    // создание транспьютерной матрицы
-    // Функция создания коммуникатора с декартовой топологией
-    // MPI_COMM_WORL - родительский коммуникатор,
-    // 2 - число измерений 
-    // size - массив размера ndims, в котором задается число процессов вдоль каждого измерения;
-    // comm - новый коммуникатор
-    MPI_Cart_create(MPI_COMM_WORLD, 2, size, periodic, 0, &comm);
-    int coords[2];
-    // Функция определения координат процесса по его идентификатору
-    // comm - коммуникатор с декартовой топологией 
-    // rank - идентификатор процесса 
-    // 2 - число измерений
-    // coords - координаты процесса в декартовой топологии
-    MPI_Cart_coords(comm, rank, 2, coords);
-    int path[2][9] = {{0, 1, 2, 3, 4, 9, 14, 19, 24}, {0, 5, 10, 15, 20, 21, 22, 23, 24}};
-    //printf("Coordinates for process %d: (%d, %d)\n", rank, coords[0], coords[1]);
-    for (int i = 0; i<2; i++)
-    {
-        for (int j = 1; j<9; j++)
-        {
-            if (rank == path[i][j])
-                printf("Coordinates for process %d: (%d, %d)\n", rank, coords[0], coords[1]);
-                //инициировать прием сообщения 
-                //OUT	buf	-	адрес начала расположения принимаемого сообщения;
-                //IN	count	-	максимальное число принимаемых элементов;
-                //IN	datatype	-	тип элементов принимаемого сообщения;
-                //IN	source	-	номер процесса-отправителя;
-                //IN	tag	-	идентификатор сообщения (номер части сообщения);
-                //IN	comm	-	коммуникатор области связи;
-                //OUT	status	-	атрибуты принятого сообщения.
-                //MPI_Recv(void* buf, Count, MPI_INTEGER, path[i][j-1], k, MPI_COMM_WORLD, status); 
-        }
-
-    }
-    for (int i = 0; i<2; i++)
-    {
-        for (int j=0; j<8; j++)
-        {
-            //Предусмотренный в MPI буфер в памяти пользователя используется для буферизации исходящих сообщений. 
-            //Буфер используется только сообщениями, посланными в буферизованном режиме. 
-            //За одну операцию к процессу может быть присоединен только один буфер.
-            //IN	buffer	начальный адрес буфера (альтернатива)
-            //IN	size	размер буфера, в байтах (целое)
-            //MPI_Buffer_attach (buf, blen);
-
-            //инициировать отправку сообщения
-            //IN	buf	начальный адрес буфера посылки (альтернатива)	
-            //IN	count	число элементов в буфере посылки (неотрицательное целое)	
-            //IN	datatype	тип данных каждого элемента в буфере посылки (дескриптор)	
-            //IN	dest	номер процесса-получателя (целое)	
-            //IN	tag	тэг сообщения (целое)	
-            //IN	comm	коммуникатор (дескриптор)
-            //MPI_BSEND(buf, Count, MPI_INTEGER, path[i][j+1], k, MPI_COMM_WORLD)
-
-            //Отключение буфера операционно связано с MPI. 
-            //Вызов возвращает адрес и размер отключенного буфера. 
-            //Эта операция будет блокирована, пока находящееся в буфере сообщение не будет передано. 
-            //После выполнения этой функции пользователь может повторно использовать или перераспределять объем памяти, занятый буфером.
-            //OUT	buffer_addr	Начальный адрес буфера (альтернатива)	
-            //OUT	size	Размер буфера, в байтах (целое)	
-            //MPI_Buffer_detach(&buf, &blen);
-            //free(buf);
+    MPI_Comm_rank(MPI_COMM_WORLD, &wrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &wsize);
+    if (wrank == 0) {
+        for (unsigned i = 0; i < L; i++) {
+            message[i] = i;
         }
     }
+    if (wrank == 0) {
+        for (unsigned i = 0; i < L; i++) {
+            printf("First process%lf\n",  message[i]);
+        }
+    }
+    
+    for (unsigned i = 0, tag = 1215; i < 2; i++, tag++) {
+        for (unsigned j = 1; j < 7; j++) {
+            if (paths[i][j] == wrank) {
+                unsigned c = 0;
+                if (wrank == 15 && i == 1) {
+                    c = K * Count;
+                }
+                for (unsigned k = 0; k < K; k++) {
+                    MPI_Recv( message + k * Count + c, Count, MPI_DOUBLE, paths[i][j - 1], tag, MPI_COMM_WORLD, &status);
+                }
+                break;
+            }
+        }
+    }
+
+    unsigned buff_size = L * sizeof(double) + MPI_BSEND_OVERHEAD;
+    double* buff = malloc(buff_size);
+    MPI_Buffer_attach(buff, buff_size);
+    for (unsigned i = 0, tag = 1215; i < 2; i++, tag++) {
+        for (unsigned j = 0; j < 6; j++) {
+            if (paths[i][j] == wrank) {
+                unsigned c = 0;
+                if (wrank == 0 && i == 1) {
+                    c = K * Count;
+                }
+                for (unsigned k = 0; k < K; k++) {
+                    MPI_Bsend( message + k * Count + c, Count, MPI_DOUBLE, paths[i][j + 1], tag, MPI_COMM_WORLD);
+                }
+                break;
+            }
+        }
+    }
+    MPI_Buffer_detach(buff, &buff_size);
+    free(buff);
+    
+    if (wrank == 15) {
+        for (unsigned i = 0; i < L; i++) {
+            printf("%lf\n",  message[i]);
+        }
+    }
+    free( message);
+
     MPI_Finalize();
     return 0;
 }
