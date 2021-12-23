@@ -10,7 +10,7 @@ int KILL = 0;
 MPI_Comm mpi_comm;
 size_t startIdx;
 size_t step;
-int nRows = 2;
+int nRows = 8;
 int alpha = 3;
 int betta = 4;
 
@@ -25,8 +25,9 @@ void printMatrix(int *c, int n)
     printf("Begining of printing\n");
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < n; j++) {
-            printf("%d\n", c[i * n + j]);
+            printf("%d  ", c[i * n + j]);
         }
+        printf("\n");
     }
     printf("End of printing\n");
 }
@@ -83,26 +84,34 @@ static void verbose_errhandler(MPI_Comm* comm, int* err, ...) {
     char errstr[MPI_MAX_ERROR_STRING];
     
     MPI_Group group_f;
+    MPI_Group group_norm;
+    MPI_Comm_rank(mpi_comm, &old_rank);
     MPI_Comm_size(mpi_comm, &old_size);
-    MPI_Comm_size(mpi_comm, &old_rank);
-    //printf ("Amount of processes in communicator with failed processes: %d", size);
-    
-    MPIX_Comm_failure_ack(mpi_comm);
-    MPIX_Comm_failure_get_acked(mpi_comm, &group_f);
-    MPI_Group_size(group_f, &amount_f);
+    int* norm_ranks = malloc(sizeof(int)*old_size);
+    int* f_ranks = malloc(sizeof(int)*amount_f);
+    //printf ("Amount of processes in communicator with failed processes: %d\n", old_size);
+    if (old_rank == 0)
+    {
+        MPI_Comm_group(mpi_comm, &group_norm);
+        MPIX_Comm_failure_ack(mpi_comm);
+        MPIX_Comm_failure_get_acked(mpi_comm, &group_f);
+        MPI_Group_size(group_f, &amount_f);
+        for (int i = 0; i<amount_f; i++)
+           f_ranks[i] = i;
+        MPI_Group_translate_ranks(group_f, amount_f, f_ranks, group_norm, norm_ranks);
+    }
     MPI_Error_string( *err, errstr, &len );
     //printf("Rank %d / %d: Notified of error %s in %d processes\n", rank, size, errstr, amount_f);
     
     MPIX_Comm_shrink(*comm, &mpi_comm);
-
     MPI_Comm_rank(mpi_comm, &rank);
     MPI_Comm_size(mpi_comm, &size);
-    //printf ("Amount of processes in communicator with failed processes: %d", size);
+    //printf ("Amount of processes in communicator without failed processes: %d\n", size);
     MPI_Barrier(mpi_comm);
     
     if (old_rank == 0)
     {
-        startIdx = (nRows / old_size * KILL_PROC) + min (KILL_PROC, (nRows % old_size));
+        startIdx = (nRows / old_size * norm_ranks[0]) + min (norm_ranks[0], (nRows % old_size));
         step = nRows / old_size + (rank < (nRows % old_size));
         MultMatrix(a, b, c, cMpi, nRows, startIdx, step, alpha, betta, rank);
     }
@@ -136,7 +145,7 @@ int main(int argc, char *argv[])
                 ElemMatrix(cMpiRes, nRows, 0);
                 ElemMatrix(cMpi, nRows, 0);
             }
-            MPI_Comm_size(mpi_comm, &nProcs);
+            
             MPI_Bcast(a, nRows * nRows, MPI_INT, 0, mpi_comm);
             MPI_Bcast(b, nRows * nRows, MPI_INT, 0, mpi_comm);
 
@@ -153,11 +162,12 @@ int main(int argc, char *argv[])
 
             MPI_Reduce(cMpi, cMpiRes, nRows * nRows, MPI_INT, MPI_SUM, 0, mpi_comm);
 
-            /*if (!rank) {
-                printf("Size of matrix: %d \n", nRows);
+            MPI_Comm_size(mpi_comm, &nProcs);
+            if (!rank) {
+                printf("Size of matrix: %d * %d \n", nRows, nRows);
                 printf("Amount of processes, that are alive: %d \n", nProcs);
                 printf("Time for matrix computing: %f \n", timerMpi);
-            }*/
+            }
             
             if (rank == 0)
             {
